@@ -1,0 +1,6 @@
+lightning_logs/
+checkpoints/
+data/
+MNIST/
+saved_models/
+Test/
