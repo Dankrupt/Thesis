@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import matplotlib
 import json
 import os
-import random
 
 
 # Load json file containing variables
@@ -81,12 +80,11 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
             num_images_per_part = num_total_images // 4
             noise_levels_part1 = [0.0] * num_images_per_part
             noise_levels_part2 = [0.0] * num_images_per_part
-            #noise_levels_part2 = np.linspace(0.3, 0.5, num_images_per_part)
+            #noise_levels_part2 = np.linspace(0.1, 0.3, num_images_per_part)
             noise_levels_part3 = [0.0] * num_images_per_part
             #noise_levels_part3 = np.linspace(0.3, 0.5, num_images_per_part)
-            noise_levels_part4 = [0.0] * num_images_per_part
-            #noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
-            #np.random.shuffle(noise_levels_part4)
+            noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
+            np.random.shuffle(noise_levels_part4)
 
             # Combine noise levels for the entire dataset
             all_noise_levels = np.concatenate([noise_levels_part1, noise_levels_part2, noise_levels_part3, noise_levels_part4])
@@ -207,8 +205,9 @@ if __name__ == '__main__':
     checkpoint_callback = ModelCheckpoint(
                             #monitor = "test_loss",#monitors val loss
                             #mode = "min",#Picks the fold with the lowest val_loss
-                            dirpath= "ProofOfConcept/saved_models/",
-                            filename= "AutoencoderMNIST-{epoch:02d}-{train_loss:.2f}",
+                            dirpath= "saved_models/",
+                            filename= "AutoencoderMNIST-DEL4-{epoch:02d}-{train_loss:.2f}",
+                            save_on_train_epoch_end=False
     )
 
     trainer = Trainer(max_epochs=max_epochs, callbacks=[checkpoint_callback], accelerator=device, devices=1)
