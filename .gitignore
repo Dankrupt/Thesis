@@ -4,3 +4,4 @@ data/
 MNIST/
 saved_models/
 Test/
+ProofOfConcept/__pycache__/
