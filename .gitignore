@@ -4,3 +4,5 @@ data/
 MNIST/
 saved_models/
 Test/
+ProofOfConcept/parameters.json
+ProofOfConcept/__pycache__/
