@@ -71,14 +71,14 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
             # Define varying levels of noise for each part of the dataset
             num_total_images = len(dataset)
             num_images_per_part = num_total_images // 4
-            noise_levels_part1 = [0.0] * num_images_per_part
-            #noise_levels_part1 = np.linspace(0.5, 0.7, num_images_per_part)
-            noise_levels_part2 = [0.0] * num_images_per_part
-            #noise_levels_part2 = np.linspace(0.5, 0.7, num_images_per_part)
-            noise_levels_part3 = [0.0] * num_images_per_part
-            #noise_levels_part3 = np.linspace(0.5, 0.7, num_images_per_part)
-            noise_levels_part4 = [0.0] * num_images_per_part
-            #noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
+            #noise_levels_part1 = [0.0] * num_images_per_part
+            noise_levels_part1 = np.linspace(0.5, 0.7, num_images_per_part)
+            #noise_levels_part2 = [0.0] * num_images_per_part
+            noise_levels_part2 = np.linspace(0.5, 0.7, num_images_per_part)
+            #noise_levels_part3 = [0.0] * num_images_per_part
+            noise_levels_part3 = np.linspace(0.5, 0.7, num_images_per_part)
+            #noise_levels_part4 = [0.0] * num_images_per_part
+            noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
             #np.random.shuffle(noise_levels_part4)
 
             # Combine noise levels for the entire dataset
@@ -99,47 +99,54 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
 
 # PyTorch Lightning Module
 class LabeledNoisyMNISTModel(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, input_size, hidden_size, latent_size):
         super().__init__()
         self.outputs = []
         self.losses = []
 
-        # Linear encoder
-        # 784 ==> 9
+        # Encoder
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(28 * 28, 128),
+            torch.nn.Linear(input_size, 512),
             torch.nn.ReLU(),
-            torch.nn.Linear(128, 64),
+            torch.nn.Linear(512, 256),
             torch.nn.ReLU(),
-            torch.nn.Linear(64, 36),
+            torch.nn.Linear(256, 128),
             torch.nn.ReLU(),
-            torch.nn.Linear(36, 18),
-            torch.nn.ReLU(),
-            torch.nn.Linear(18, 9)
+            torch.nn.Linear(128, latent_size * 2)  # Two outputs for mean and log-variance
         )
-        
-        # Linear decoder
-        # 9 ==> 784
+
+        # Decoder
         self.decoder = torch.nn.Sequential(
-            torch.nn.Linear(9, 18),
+            torch.nn.Linear(latent_size, 128),
             torch.nn.ReLU(),
-            torch.nn.Linear(18, 36),
+            torch.nn.Linear(128, 256),
             torch.nn.ReLU(),
-            torch.nn.Linear(36, 64),
+            torch.nn.Linear(256, 512),
             torch.nn.ReLU(),
-            torch.nn.Linear(64, 128),
-            torch.nn.ReLU(),
-            torch.nn.Linear(128, 28 * 28),
-            torch.nn.Tanh()
+            torch.nn.Linear(512, input_size),
+            torch.nn.Sigmoid()  # Output values between 0 and 1
         )
         
         # Validation using MSE Loss function
-        self.loss_function = torch.nn.MSELoss()
+        #self.loss_function = torch.nn.MSELoss()
+    def loss_function(self, recon_x, x, mu, log_var):
+        reconstruction_loss = torch.nn.functional.binary_cross_entropy(recon_x, x, reduction='sum')
+
+        # KL divergence regularization
+        kl_divergence = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        return reconstruction_loss + kl_divergence
+    
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return mu + eps * std
         
     def forward(self, x):
         encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return decoded
+        mu, log_var = encoded[:, :latent_size], encoded[:, latent_size:]
+        z = self.reparameterize(mu, log_var)
+        decoded = self.decoder(z)
+        return decoded, mu, log_var
 
     def training_step(self, batch):
         image, label, noise_level = batch
@@ -147,30 +154,21 @@ class LabeledNoisyMNISTModel(pl.LightningModule):
         # Reshaping the image to (-1, 784)
         image = torch.reshape(image, (-1, 28*28)).to(device)
         
-        # Output of Autoencoder
-        reconstructed = model(image)
-        
-        # Calculating the loss function
-        loss = self.loss_function(reconstructed, image)
-        self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
-
+        recon_x, mu, log_var = self(image)
+        loss = self.loss_function(recon_x, image, mu, log_var)
         self.losses.append(loss.item())
-        #self.outputs.append((image, reconstructed))
         return loss
     
     def test_step(self, batch, batch_idx):
         image, label, noise_level = batch
+
         # Reshaping the image to (-1, 784)
         image = torch.reshape(image, (-1, 28*28)).to(device)
-        
-        # Output of Autoencoder
-        reconstructed = model(image)
-        
-        # Calculating the loss function
-        loss = self.loss_function(reconstructed, image)
-        self.log("test_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
 
-        self.outputs.append((image, reconstructed))
+        recon_x, mu, log_var = self(image)
+        loss = self.loss_function(recon_x, image, mu, log_var)
+
+        self.outputs.append((image, recon_x))
         return loss
 
     def configure_optimizers(self):
@@ -194,18 +192,19 @@ class LabeledNoisyMNISTModel(pl.LightningModule):
 
 if __name__ == '__main__':
     # Model Initialization
-    model = LabeledNoisyMNISTModel()
+    input_size = 28 * 28  # MNIST image size
+    hidden_size = 256
+    latent_size = 20
+    model = LabeledNoisyMNISTModel(input_size, hidden_size, latent_size)
     module = LabeledNoisyMNISTDataModule()
 
     #if not save:
-    #    print('||||||||||||||||||||||||||||||||||||')
     #    checkpoint_callback = None
     #else:
-    #    print('////////////////////////////')
     checkpoint_callback = ModelCheckpoint(
                             dirpath= "D:/Thesis/ProofOfConcept/saved_models/",
-                            filename= "AutoencoderMNIST-ZERO-{epoch:02d}-{train_loss:.2f}",
-                            save_on_train_epoch_end=True)
+                            filename= "AutoencoderMNIST-VAE-HIGH-{epoch:02d}",
+                            save_on_train_epoch_end=save)
 
     trainer = Trainer(max_epochs=max_epochs, callbacks=[checkpoint_callback], accelerator=device, devices=1)
     trainer.fit(model,module)

@@ -1,6 +1,6 @@
 {
     "model" : {
-        "max_epochs" : 5,
+        "max_epochs" : 20,
         "batch_size" : 128
     },
     "optimizer" : {
@@ -10,5 +10,6 @@
             "step_size" : 20,
             "gamma" : 0.5
         }
-    }
+    },
+    "save" : true
 }
