@@ -12,10 +12,10 @@ import torch.utils.data as data_utils
 tensor_transform = transforms.ToTensor()
 
 path = os.path.join(os.getcwd())
-model1 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-ZERO-epoch=19.ckpt')
-model2 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-LOW-epoch=19.ckpt')
-model3 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-MEDIUM-epoch=19.ckpt')
-model4 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-HIGH-epoch=19.ckpt')
+model1 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-ZERO-PosRotVar2-epoch=09.ckpt')
+model2 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-LOW-PosRotVar2-epoch=09.ckpt')
+model3 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-MEDIUM-PosRotVar2-epoch=09.ckpt')
+model4 = LabeledNoisyMNISTModel.load_from_checkpoint(path + '/ProofOfConcept/saved_models/AutoencoderMNIST-VAE-HIGH-PosRotVar2-epoch=09.ckpt')
 model1.freeze()
 model2.freeze()
 model3.freeze()
@@ -29,10 +29,15 @@ dataset = data_utils.Subset(dataset, indices)
 # Define varying levels of noise for each part of the dataset
 num_total_images = len(dataset)
 num_images_per_part = num_total_images // 4
-noise_levels_part1 = np.linspace(0.0, 0.2, num_images_per_part)
+noise_levels_part1 = np.linspace(0.0, 0.0, num_images_per_part)
 noise_levels_part2 = np.linspace(0.2, 0.4, num_images_per_part)
 noise_levels_part3 = np.linspace(0.4, 0.6, num_images_per_part)
 noise_levels_part4 = np.linspace(0.6, 0.8, num_images_per_part)
+
+#np.random.shuffle(noise_levels_part1)
+#np.random.shuffle(noise_levels_part2)
+#np.random.shuffle(noise_levels_part3)
+#np.random.shuffle(noise_levels_part4)
 
 # Combine noise levels for the entire dataset
 all_noise_levels = np.concatenate([noise_levels_part1, noise_levels_part2, noise_levels_part3, noise_levels_part4])
@@ -47,19 +52,19 @@ noisy_dataset = LabeledNoisyMNIST(dataset, noise_levels=all_noise_levels)
 loss_function = torch.nn.MSELoss()
 error1, error2, error3, error4 = ([] for i in range(4))
 for image in tqdm(noisy_dataset):
-    image = torch.reshape(image[0], (-1, 28*28))
+    image = torch.reshape(image[0], (-1, 28*28)).to('cuda')
 
     reconstructed1 = model1(image)
-    error1.append(loss_function(reconstructed1[0], image))
+    error1.append(loss_function(reconstructed1[0], image).item())
 
     reconstructed2 = model2(image)
-    error2.append(loss_function(reconstructed2[0], image))
+    error2.append(loss_function(reconstructed2[0], image).item())
 
     reconstructed3 = model3(image)
-    error3.append(loss_function(reconstructed3[0], image))
+    error3.append(loss_function(reconstructed3[0], image).item())
 
     reconstructed4 = model4(image)
-    error4.append(loss_function(reconstructed4[0], image))
+    error4.append(loss_function(reconstructed4[0], image).item())
 
 window = 20
 average_error1, average_error2, average_error3, average_error4 = ([] for i in range(4))

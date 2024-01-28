@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 import json
 import os
+import random
+from torchvision.transforms import v2
 
 
 # Load json file containing variables
@@ -28,9 +30,6 @@ if torch.cuda.is_available():
     device = 'cuda' 
 else: 
     device = 'cpu'
-
-# Transforms images to a PyTorch Tensor
-tensor_transform = transforms.ToTensor()
 
 
 # Define a custom dataset class to add varying levels of noise to MNIST images
@@ -60,7 +59,15 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
     def __init__(self, batch_size=batch_size):
         super().__init__()
         self.batch_size = batch_size
-        self.tensor_transform = transforms.ToTensor()
+        # Transforms images to a PyTorch Tensor
+        #tensor_transform = transforms.ToTensor()
+        self.tensor_transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                v2.RandomAffine(degrees=180,translate=(0.4, 0.4),scale=(0.5,0.5)),
+            ]
+        )
+
         dataset = datasets.MNIST(root='./data', train=True, transform=self.tensor_transform)
         self.mnist_train, self.mnist_val = random_split(dataset, [55000, 5000])
             
@@ -68,14 +75,14 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         # Define varying levels of noise for each part of the dataset
         num_total_images = len(self.mnist_train)
         num_images_per_part = num_total_images // 4
-        #noise_levels_part1 = [0.0] * num_images_per_part
-        noise_levels_part1 = np.linspace(0.5, 0.7, num_images_per_part)
-        #noise_levels_part2 = [0.0] * num_images_per_part
-        noise_levels_part2 = np.linspace(0.5, 0.7, num_images_per_part)
-        #noise_levels_part3 = [0.0] * num_images_per_part
-        noise_levels_part3 = np.linspace(0.5, 0.7, num_images_per_part)
-        #noise_levels_part4 = [0.0] * num_images_per_part
-        noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part1 = [0.0] * num_images_per_part
+        #noise_levels_part1 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part2 = [0.0] * num_images_per_part
+        #noise_levels_part2 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part3 = [0.0] * num_images_per_part
+        #noise_levels_part3 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part4 = [0.0] * num_images_per_part
+        #noise_levels_part4 = np.linspace(0.1, 0.3, num_images_per_part)
         #np.random.shuffle(noise_levels_part4)
 
         # Combine noise levels for the entire dataset
@@ -91,14 +98,14 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         # Define varying levels of noise for each part of the dataset
         num_total_images = len(self.mnist_val)
         num_images_per_part = num_total_images // 4
-        #noise_levels_part1 = [0.0] * num_images_per_part
-        noise_levels_part1 = np.linspace(0.1, 0.3, num_images_per_part)
-        #noise_levels_part2 = [0.0] * num_images_per_part
-        noise_levels_part2 = np.linspace(0.1, 0.3, num_images_per_part)
-        #noise_levels_part3 = [0.0] * num_images_per_part
-        noise_levels_part3 = np.linspace(0.1, 0.3, num_images_per_part)
-        #noise_levels_part4 = [0.0] * num_images_per_part
-        noise_levels_part4 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part1 = [0.0] * num_images_per_part
+        #noise_levels_part1 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part2 = [0.0] * num_images_per_part
+        #noise_levels_part2 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part3 = [0.0] * num_images_per_part
+        #noise_levels_part3 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part4 = [0.0] * num_images_per_part
+        #noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
         #np.random.shuffle(noise_levels_part4)
 
         # Combine noise levels for the entire dataset
@@ -220,7 +227,7 @@ if __name__ == '__main__':
 
     checkpoint_callback = ModelCheckpoint(
                             dirpath= "D:/Thesis/ProofOfConcept/saved_models/",
-                            filename= "AutoencoderMNIST-VAE-HIGH-{epoch:02d}",
+                            filename= "AutoencoderMNIST-VAE-ZERO-PosRotVar2-{epoch:02d}",
                             save_on_train_epoch_end=save)
 
     trainer = Trainer(max_epochs=max_epochs, callbacks=[checkpoint_callback], accelerator=device, devices=1)
