@@ -68,14 +68,14 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         # Define varying levels of noise for each part of the dataset
         num_total_images = len(self.mnist_train)
         num_images_per_part = num_total_images // 4
-        #noise_levels_part1 = [0.0] * num_images_per_part
-        noise_levels_part1 = np.linspace(0.5, 0.7, num_images_per_part)
-        #noise_levels_part2 = [0.0] * num_images_per_part
-        noise_levels_part2 = np.linspace(0.5, 0.7, num_images_per_part)
-        #noise_levels_part3 = [0.0] * num_images_per_part
-        noise_levels_part3 = np.linspace(0.5, 0.7, num_images_per_part)
-        #noise_levels_part4 = [0.0] * num_images_per_part
-        noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part1 = [0.0] * num_images_per_part
+        #noise_levels_part1 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part2 = [0.0] * num_images_per_part
+        #noise_levels_part2 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part3 = [0.0] * num_images_per_part
+        #noise_levels_part3 = np.linspace(0.5, 0.7, num_images_per_part)
+        noise_levels_part4 = [0.0] * num_images_per_part
+        #noise_levels_part4 = np.linspace(0.5, 0.7, num_images_per_part)
         #np.random.shuffle(noise_levels_part4)
 
         # Combine noise levels for the entire dataset
@@ -85,20 +85,20 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         np.random.shuffle(self.all_noise_levels)
 
         self.labeled_noisy_mnist_train = LabeledNoisyMNIST(self.mnist_train, noise_levels=self.all_noise_levels)
-        return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
     
     def val_dataloader(self):
         # Define varying levels of noise for each part of the dataset
         num_total_images = len(self.mnist_val)
         num_images_per_part = num_total_images // 4
-        #noise_levels_part1 = [0.0] * num_images_per_part
-        noise_levels_part1 = np.linspace(0.1, 0.3, num_images_per_part)
-        #noise_levels_part2 = [0.0] * num_images_per_part
-        noise_levels_part2 = np.linspace(0.1, 0.3, num_images_per_part)
-        #noise_levels_part3 = [0.0] * num_images_per_part
-        noise_levels_part3 = np.linspace(0.1, 0.3, num_images_per_part)
-        #noise_levels_part4 = [0.0] * num_images_per_part
-        noise_levels_part4 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part1 = [0.0] * num_images_per_part
+        #noise_levels_part1 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part2 = [0.0] * num_images_per_part
+        #noise_levels_part2 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part3 = [0.0] * num_images_per_part
+        #noise_levels_part3 = np.linspace(0.1, 0.3, num_images_per_part)
+        noise_levels_part4 = [0.0] * num_images_per_part
+        #noise_levels_part4 = np.linspace(0.1, 0.3, num_images_per_part)
         #np.random.shuffle(noise_levels_part4)
 
         # Combine noise levels for the entire dataset
@@ -108,7 +108,7 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         np.random.shuffle(self.all_noise_levels)
 
         self.labeled_noisy_mnist_val = LabeledNoisyMNIST(self.mnist_val, noise_levels=self.all_noise_levels)
-        return DataLoader(self.labeled_noisy_mnist_val, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(self.labeled_noisy_mnist_val, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
 
 
 # PyTorch Lightning Module
@@ -120,7 +120,7 @@ class LabeledNoisyMNISTModel(pl.LightningModule):
         self.val_losses = []
         self.input_size = 28 * 28  # MNIST image size
         self.hidden_size = 256
-        self.latent_size = 20
+        self.latent_size = 50
 
         # Encoder
         self.encoder = torch.nn.Sequential(
@@ -209,6 +209,11 @@ class LabeledNoisyMNISTModel(pl.LightningModule):
             "interval": "epoch"
             }
         }
+    
+    def encode(self, x):
+        encoded = self.encoder(x)
+        mu, log_var = encoded[:, :self.latent_size], encoded[:, self.latent_size:]
+        return mu, log_var
 
 
 if __name__ == '__main__':
@@ -220,7 +225,7 @@ if __name__ == '__main__':
 
     checkpoint_callback = ModelCheckpoint(
                             dirpath= "D:/Thesis/ProofOfConcept/saved_models/",
-                            filename= "AutoencoderMNIST-VAE-HIGH-{epoch:02d}",
+                            filename= "AutoencoderMNIST-VAE-ZERO-Clean-{epoch:02d}",
                             save_on_train_epoch_end=save)
 
     trainer = Trainer(max_epochs=max_epochs, callbacks=[checkpoint_callback], accelerator=device, devices=1)
@@ -238,6 +243,7 @@ if __name__ == '__main__':
         axs[0].set_ylabel('Loss')
         axs[0].plot(model.train_losses)
         axs[0].set_title('Train Loss')
+        
         axs[1].plot(model.val_losses)
         axs[1].set_title('Validation Loss')
 

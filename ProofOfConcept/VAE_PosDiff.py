@@ -6,11 +6,11 @@ import numpy as np
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning import Trainer
 import matplotlib.pyplot as plt
-import matplotlib
 import json
 import os
 import random
 from torchvision.transforms import v2
+from pytorch_lightning.utilities.model_summary import summarize
 
 
 # Load json file containing variables
@@ -47,12 +47,14 @@ class LabeledNoisyMNIST(Dataset):
 
         # Get the noise level for this image
         noise_level = self.noise_levels[index]
+        #noise_level = self.noise_levels[0][index]
+        #noise_label = self.noise_levels[1]
 
         # Add Gaussian noise to the image with varying levels
         noisy_image = image + noise_level * torch.randn_like(image)
         noisy_image = torch.clamp(noisy_image, 0, 1)  # Ensure pixel values are between 0 and 1
 
-        return noisy_image, label, noise_level
+        return noisy_image, label, noise_level#, noise_label
 
 # PyTorch Lightning DataModule
 class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
@@ -92,7 +94,7 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         np.random.shuffle(self.all_noise_levels)
 
         self.labeled_noisy_mnist_train = LabeledNoisyMNIST(self.mnist_train, noise_levels=self.all_noise_levels)
-        return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
     
     def val_dataloader(self):
         # Define varying levels of noise for each part of the dataset
@@ -115,7 +117,7 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         np.random.shuffle(self.all_noise_levels)
 
         self.labeled_noisy_mnist_val = LabeledNoisyMNIST(self.mnist_val, noise_levels=self.all_noise_levels)
-        return DataLoader(self.labeled_noisy_mnist_val, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(self.labeled_noisy_mnist_val, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
 
 
 # PyTorch Lightning Module
@@ -222,8 +224,8 @@ if __name__ == '__main__':
     # Model Initialization
     model = LabeledNoisyMNISTModel()
     module = LabeledNoisyMNISTDataModule()
-    train_dataloaders = LabeledNoisyMNISTDataModule().train_dataloader()
-    val_dataloaders = LabeledNoisyMNISTDataModule().val_dataloader()
+    train_dataloaders = module.train_dataloader()
+    val_dataloaders = module.val_dataloader()
 
     checkpoint_callback = ModelCheckpoint(
                             dirpath= "D:/Thesis/ProofOfConcept/saved_models/",
@@ -231,8 +233,9 @@ if __name__ == '__main__':
                             save_on_train_epoch_end=save)
 
     trainer = Trainer(max_epochs=max_epochs, callbacks=[checkpoint_callback], accelerator=device, devices=1)
-    trainer.fit(model,module)
+    train = trainer.fit(model,module)
     trainer.validate(model=model, datamodule=module)
+    print(summarize(model))
 
     # Visualizing input and output
     image = model.outputs[-1][0][-1]

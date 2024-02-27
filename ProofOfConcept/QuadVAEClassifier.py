@@ -23,6 +23,7 @@ model4.freeze()
 
 # Getting the dataset, picking a random entry and adding varying amounts of noise
 dataset = datasets.MNIST(root='./data', train=True, transform=tensor_transform)
+print(len(dataset))
 indices = torch.arange(0,len(dataset)//128)
 dataset = data_utils.Subset(dataset, indices)
 
