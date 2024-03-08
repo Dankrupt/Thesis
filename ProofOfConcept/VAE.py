@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from torchvision import datasets, transforms
 import pytorch_lightning as pl
 import numpy as np
@@ -22,6 +22,7 @@ with open(os.path.join(path) + "/ProofOfConcept/parameters.json") as file:
     step_size = data['optimizer']['scheduler']['step_size']
     gamma = data['optimizer']['scheduler']['gamma']
     save = data['save']
+    subset_size = data['subset_size']
 
 # Check if GPU is available
 if torch.cuda.is_available(): 
@@ -46,14 +47,29 @@ class LabeledNoisyMNIST(Dataset):
     def __getitem__(self, index):
         image, label = self.dataset[index]
 
+        
         # Get the noise level for this image
-        noise_level = self.noise_levels[index]
+        #noise_level = self.noise_levels[index][0]
+        #print(self.noise_levels[0])
+        noise_label = self.noise_levels[index][1]
+        percent = self.noise_levels[index][0]
 
-        # Add Gaussian noise to the image with varying levels
-        noisy_image = image + noise_level * torch.randn_like(image)
-        noisy_image = torch.clamp(noisy_image, 0, 1)  # Ensure pixel values are between 0 and 1
+        #noise_label = self.noise_levels[1]
+        #percent = self.noise_levels[0]
+        
+        noisy_image = self.add_noise(image, percent)
 
-        return noisy_image, label, noise_level
+        #print(f'noise_label: {noise_label}')
+        #print(f'Percent: {percent}')
+        return noisy_image, label, noise_label, percent
+    
+    def add_noise(self, img, percent):
+        dev = img.device
+        #percent = .5 # Try changing from 0 to 1
+        beta = torch.tensor(percent, device=dev)
+        alpha = torch.tensor(1 - percent, device=dev)
+        noise = torch.randn_like(img)
+        return (alpha * img + beta * noise)
 
 # PyTorch Lightning DataModule
 class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
@@ -61,8 +77,8 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
         super().__init__()
         self.batch_size = batch_size
         self.tensor_transform = transforms.ToTensor()
-        dataset = datasets.MNIST(root='./data', train=True, transform=self.tensor_transform)
-        self.mnist_train, self.mnist_val = random_split(dataset, [55000, 5000])
+        self.dataset = datasets.MNIST(root='./data', train=True, transform=self.tensor_transform)
+        self.mnist_train, self.mnist_val = random_split(self.dataset, [55000, 5000])
             
     def train_dataloader(self):
         # Define varying levels of noise for each part of the dataset
@@ -86,6 +102,113 @@ class LabeledNoisyMNISTDataModule(pl.LightningDataModule):
 
         self.labeled_noisy_mnist_train = LabeledNoisyMNIST(self.mnist_train, noise_levels=self.all_noise_levels)
         return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
+    
+    def train_dataloader_blend(self):
+        # Define varying levels of noise for each part of the dataset
+        num_total_images = len(self.mnist_train)
+
+        # Beta noise level
+        self.percent = np.linspace(0, 0, num_total_images)
+        self.labeled_noise_levels = []
+        for level in self.percent:
+            if 0 <= level < 0.25:
+                self.labeled_noise_levels.append((level, 0))
+            elif 0.25 <= level < 0.5:
+                self.labeled_noise_levels.append((level, 0))
+            elif 0.5 <= level < 0.75:
+                self.labeled_noise_levels.append((level, 1))
+            elif 0.75 <= level <= 1:
+                self.labeled_noise_levels.append((level, 1))
+
+        #print(self.labeled_noise_levels)
+
+        self.labeled_noisy_mnist_train = LabeledNoisyMNIST(self.mnist_train, noise_levels=self.labeled_noise_levels)
+        return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
+    
+    def val_dataloader_blend(self):
+        # Define varying levels of noise for each part of the dataset
+        num_total_images = len(self.mnist_train)
+
+        # Beta noise level
+        self.percent = np.linspace(0, 0, num_total_images)
+        self.labeled_noise_levels = []
+        for level in self.percent:
+            if 0 <= level < 0.25:
+                self.labeled_noise_levels.append((level, 0))
+            elif 0.25 <= level < 0.5:
+                self.labeled_noise_levels.append((level, 1))
+            elif 0.5 <= level < 0.75:
+                self.labeled_noise_levels.append((level, 2))
+            elif 0.75 <= level <= 1:
+                self.labeled_noise_levels.append((level, 3))
+
+        self.labeled_noisy_mnist_train = LabeledNoisyMNIST(self.mnist_train, noise_levels=self.labeled_noise_levels)
+        return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
+    
+    def subset_dataloader_blend(self):
+        # Subset selection
+        subset_indices = torch.randperm(len(self.dataset))[:subset_size]
+        subset_dataset = Subset(self.dataset, subset_indices)
+
+        # Define varying levels of noise for each part of the dataset
+        num_total_images = len(subset_dataset)
+
+        # Beta noise level
+        #self.percent = np.linspace(0, 1, num_total_images)
+        self.percent0 = np.linspace(0.0, 0.1, num_total_images//4)
+        self.percent1 = np.linspace(0.3, 0.4, num_total_images//4)
+        self.percent2 = np.linspace(0.6, 0.7, num_total_images//4)
+        self.percent3 = np.linspace(0.9, 1.0, num_total_images//4)
+        self.percent = np.concatenate([self.percent0, self.percent1, self.percent2, self.percent3])
+
+        #self.percent = np.linspace(0, 1, num_total_images)
+
+        self.labeled_noise_levels = []
+        for level in self.percent:
+            if 0 <= level < 0.25:
+                self.labeled_noise_levels.append((level, 0))
+            elif 0.25 <= level < 0.5:
+                self.labeled_noise_levels.append((level, 1))
+            elif 0.5 <= level < 0.75:
+                self.labeled_noise_levels.append((level, 2))
+            elif 0.75 <= level <= 1:
+                self.labeled_noise_levels.append((level, 3))
+
+        self.labeled_noisy_mnist_train = LabeledNoisyMNIST(subset_dataset, noise_levels=self.labeled_noise_levels)
+        return DataLoader(self.labeled_noisy_mnist_train, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
+    
+    def subset_dataloader(self):        
+        # Subset selection
+        subset_indices = torch.randperm(len(self.dataset))[:subset_size]
+        subset_dataset = Subset(self.dataset, subset_indices)
+
+        num_total_images = len(subset_dataset)
+        num_images_per_part = num_total_images // 4
+        #noise_levels_part1 = [0.0] * num_images_per_part
+        noise_levels_part1 = (np.linspace(0.0, 0.1, num_images_per_part), 0)
+        #noise_levels_part2 = [0.0] * num_images_per_part
+        noise_levels_part2 = (np.linspace(0.0, 0.1, num_images_per_part), 1)
+        #noise_levels_part3 = [0.0] * num_images_per_part
+        noise_levels_part3 = (np.linspace(0.89, 0.9, num_images_per_part), 2)
+        #noise_levels_part4 = [0.0] * num_images_per_part
+        noise_levels_part4 = (np.linspace(0.89, 0.9, num_images_per_part), 3)
+        #np.random.shuffle(noise_levels_part4)
+
+        # Combine noise levels for the entire dataset
+        #self.all_noise_levels = np.concatenate([noise_levels_part1, noise_levels_part2, noise_levels_part3, noise_levels_part4])
+        self.all_noise_levels = [noise_levels_part1, noise_levels_part2, noise_levels_part3, noise_levels_part4]
+        self.labeled_noise_levels = []
+        for i in self.all_noise_levels:
+            labeled_noise_level = []
+            for j in i[0]:
+                labeled_noise_level.append((j, i[1]))
+            self.labeled_noise_levels.extend(labeled_noise_level)
+
+        # Shuffle the noise levels to ensure random assignment to images
+        np.random.shuffle(self.labeled_noise_levels)
+
+        self.labeled_noisy_mnist_subset = LabeledNoisyMNIST(subset_dataset, noise_levels=self.labeled_noise_levels)
+        return DataLoader(self.labeled_noisy_mnist_subset, batch_size=self.batch_size, shuffle=False, num_workers=4, persistent_workers=True)
     
     def val_dataloader(self):
         # Define varying levels of noise for each part of the dataset
@@ -120,7 +243,7 @@ class LabeledNoisyMNISTModel(pl.LightningModule):
         self.val_losses = []
         self.input_size = 28 * 28  # MNIST image size
         self.hidden_size = 256
-        self.latent_size = 50
+        self.latent_size = 100
 
         # Encoder
         self.encoder = torch.nn.Sequential(
@@ -167,7 +290,7 @@ class LabeledNoisyMNISTModel(pl.LightningModule):
         return decoded, mu, log_var
 
     def training_step(self, batch):
-        image, label, noise_level = batch
+        image, label, noise_level, percent = batch
 
         # Reshaping the image to (-1, 784)
         image = torch.reshape(image, (-1, 28*28)).to(device)
@@ -179,7 +302,7 @@ class LabeledNoisyMNISTModel(pl.LightningModule):
         return loss
     
     def validation_step(self, batch, batch_idx):
-        image, label, noise_level = batch
+        image, label, noise_level, percent = batch
 
         # Reshaping the image to (-1, 784)
         image = torch.reshape(image, (-1, 28*28)).to(device)
@@ -220,12 +343,12 @@ if __name__ == '__main__':
     # Model Initialization
     model = LabeledNoisyMNISTModel()
     module = LabeledNoisyMNISTDataModule()
-    train_dataloaders = LabeledNoisyMNISTDataModule().train_dataloader()
-    val_dataloaders = LabeledNoisyMNISTDataModule().val_dataloader()
+    train_dataloaders = LabeledNoisyMNISTDataModule().train_dataloader_blend()
+    val_dataloaders = LabeledNoisyMNISTDataModule().val_dataloader_blend()
 
     checkpoint_callback = ModelCheckpoint(
                             dirpath= "D:/Thesis/ProofOfConcept/saved_models/",
-                            filename= "AutoencoderMNIST-VAE-ZERO-Clean-{epoch:02d}",
+                            filename= "AutoencoderMNIST-VAE-ZERO-Blend-{epoch:02d}",
                             save_on_train_epoch_end=save)
 
     trainer = Trainer(max_epochs=max_epochs, callbacks=[checkpoint_callback], accelerator=device, devices=1)

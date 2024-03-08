@@ -11,5 +11,6 @@
             "gamma" : 0.5
         }
     },
-    "save" : true
+    "save" : true,
+    "subset_size" : 1000
 }

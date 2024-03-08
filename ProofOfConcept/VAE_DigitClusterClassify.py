@@ -19,21 +19,6 @@ from collections import Counter
 import numpy as np
 
 
-# Classification
-class FullyConnectedClassifier(nn.Module):
-    def __init__(self):
-        super(FullyConnectedClassifier, self).__init__()
-        self.fc1 = nn.Linear(28*28, 512)  # Flatten 28x28 images to 784-dimensional vectors
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 10)  # Output layer: 10 units for 10 classes
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)  # No activation; this will be handled by nn.CrossEntropyLoss
-        return x
-
-
 # Initialize the model and data
 tensor_transform = transforms.ToTensor()
 path = os.path.join(os.getcwd())
@@ -104,68 +89,8 @@ predicted_labels = [label_mapping[cluster] for cluster in algorithm.labels_]
 accuracy = sum(1 for true, pred in zip(true_labels, predicted_labels) if true == pred) / len(true_labels)
 print(f"Accuracy: {accuracy}")
 
-"""
-train_loader = DataLoader(mnist_train, batch_size=64, shuffle=True)
-val_loader = DataLoader(mnist_val, batch_size=64, shuffle=False)
 
-# Initialize the model, loss function, and optimizer
-model = FullyConnectedClassifier().to(device)
-loss_function = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-# Training loop
-epochs = 5
-for epoch in range(epochs):
-    for images, labels in train_loader:
-        images = images.view(-1, 28*28).to(device)
-        labels = labels.to(device)
-
-        optimizer.zero_grad()
-        output = model(images)
-        loss = loss_function(output, labels)
-        loss.backward()
-        optimizer.step()
-    print(f'Epoch {epoch+1}/{epochs}, Loss: {loss.item()}')
-
-
-# Set the model to evaluation mode
-model.eval()
-
-# Variables to keep track of predictions and true labels
-all_preds = []
-all_true_labels = []
-
-# Disable gradient computation since we are only predicting
-with torch.no_grad():
-    for images, labels in mnist_val:
-        # Flatten MNIST images
-        images = images.view(images.shape[0], -1).to(device)
-        
-        # Forward pass: compute predicted outputs
-        output = model(images)
-        
-        # Convert output probabilities to predicted class by taking index of the max log-probability
-        preds = output.argmax(dim=1, keepdim=True).squeeze()
-        
-        # Collect all predictions and true labels
-        all_preds.append(preds.item())
-        #all_preds.extend(preds.tolist())
-        all_true_labels.append(labels)
-        #all_true_labels.extend(labels.tolist())
-
-# Convert lists to Tensor for performance metrics calculation
-all_preds = torch.tensor(all_preds)
-all_true_labels = torch.tensor(all_true_labels)
-
-# Calculate performance metrics
-accuracy = (all_preds == all_true_labels).float().mean().item()
-
-# Print the classification report
-print(f'Accuracy: {accuracy:.4f}')
-print(classification_report(all_true_labels, all_preds, digits=4))
-"""
-
-# Setup the figure and axes for a side-by-side comparison
+# Visualization
 fig, axs = plt.subplots(1, 2, figsize=(20, 8))
 
 # Plot for True Labels
