@@ -2,7 +2,7 @@ import torch
 from torchvision import transforms
 from sklearn.cluster import KMeans, SpectralClustering, MiniBatchKMeans
 from sklearn.mixture import GaussianMixture
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 import matplotlib.pyplot as plt
 import os
 from VAE import LabeledNoisyMNISTDataModule
@@ -35,6 +35,7 @@ if __name__ == '__main__':
     true_labels = []
     noise_levels = []
     latent_features = []
+    reconstructed = []
     for idx, batch in enumerate(dataloader):
         img, label, noise_label, percent = batch
         img = img.view(-1, 28*28).to(device)
@@ -50,7 +51,7 @@ if __name__ == '__main__':
             noise_levels.append(level.tolist())
 
 
-    # Ensure mu_values is a 2D array before clustering 
+    # Ensure mu_values is a 2D array before clustering
     mu_values_2d = np.vstack([mu.cpu().detach().numpy() for mu, _ in encoded_images_subset])
 
     # Reduce dimensions of mu_values to 2D using t-SNE
@@ -63,10 +64,10 @@ if __name__ == '__main__':
 
 
     # Set up clustering algorithm
-    kmeans = KMeans(n_clusters=4, random_state=10)
-    spectral = SpectralClustering(n_clusters=4, random_state=10)
-    gmm = GaussianMixture(n_components=4, random_state=10)
-    miniBatchKMeans = MiniBatchKMeans(n_clusters=4, random_state=10)
+    kmeans = KMeans(n_clusters=4, random_state=42)
+    spectral = SpectralClustering(n_clusters=4, random_state=42)
+    gmm = GaussianMixture(n_components=4, random_state=42)
+    miniBatchKMeans = MiniBatchKMeans(n_clusters=4, random_state=42)
     algorithm = kmeans
 
     # Cluster the encoded images in 2D
@@ -170,15 +171,52 @@ if __name__ == '__main__':
     X_train, X_test, y_train, y_test = train_test_split(X_all, y_all, test_size=0.2, random_state=42)
 
     ordinal_model.fit(X_train, y_train)
-    y_pred = ordinal_model.predict(X_test)
-
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f'Ordinal Regression Accuracy Latent Space: {accuracy}')
-
+    #y_pred = ordinal_model.predict(X_test)
     y_pred_all = ordinal_model.predict(X_all)
 
     tsne = TSNE(n_components=2, random_state=0)
     X_all_tsne = tsne.fit_transform(X_all)
+
+    accuracy = accuracy_score(y_all, y_pred_all)
+    print(f'Ordinal Regression Accuracy Latent Space: {accuracy}')
+
+    f1 = f1_score(y_all, y_pred_all, labels=[0,1,2,3], average=None)
+    print(f'Ordinal Regression F1 Score Latent Space: {f1}')
+
+
+
+    # k-means latent space
+    k_latent = kmeans.fit(X_all)
+
+    # Assign cluster labels for classification
+    label_mapping = {}
+    for cluster in set(k_latent.labels_):
+        # Find all true labels for data points in this cluster
+        labels_in_cluster = [true_labels[i] for i in range(len(true_labels)) if k_latent.labels_[i] == cluster]
+        
+        # Check if there are any labels in this cluster before proceeding
+        if labels_in_cluster:  # This ensures that the list is not empty
+            # Find the most common true label in this cluster
+            most_common_label = Counter(labels_in_cluster).most_common(1)[0][0]
+            # Map this cluster to this label
+            label_mapping[cluster] = most_common_label
+        else:
+            # Handle the case where a cluster has no labels
+            print(f"Cluster {cluster} has no labels, assigning default label 0.")
+            label_mapping[cluster] = 0
+
+    # Use this mapping to predict labels based on cluster assignments
+    predicted_labels_k_latent = [label_mapping[cluster] for cluster in k_latent.labels_]
+
+    # Convert tensors to lists of scalars if they are not already
+    true_labels_scalar_k_latent = [int(label) for label in true_labels]
+    predicted_labels_scalar_k_latent = [int(label) for label in predicted_labels_k_latent]
+
+    # Compute the accuracy
+    accuracy_k_latent = sum(1 for true, pred in zip(true_labels_scalar_k_latent, predicted_labels_scalar_k_latent) if true == pred) / len(true_labels_scalar)
+    print(f"k Means Latent Space Clustering Accuracy: {accuracy_k_latent}")
+
+
 
 
     # Visualization
@@ -191,27 +229,25 @@ if __name__ == '__main__':
     plt.title('True Labels')
     plt.xlabel('t-SNE Dimension 1')
     plt.ylabel('t-SNE Dimension 2')
-    #plt.colorbar(label='Ordinal Class')
 
     # Plot for Predicted Labels
     plt.subplot(1, 2, 2)  # Second subplot in a 1x2 grid
-    plt.scatter(X[:, 0], X[:, 1], c=predicted_labels_tsne, cmap='tab10', alpha=0.6)
-    plt.title('Predicted Labels by Ordinal Regression')
+    plt.scatter(X[:, 0], X[:, 1], c=predicted_labels_scalar_k_latent, cmap='tab10', alpha=0.6)
+    plt.title('Predicted Labels by Clustering Latent Space')
     plt.xlabel('t-SNE Dimension 1')
     plt.ylabel('t-SNE Dimension 2')
-    #plt.colorbar(label='Ordinal Class')
 
 
-    # Ordinal Regression Latent Space Confusion Matrix
-    conf_matrix = confusion_matrix(y_test, y_pred, labels=[0,1,2,3])
+    # Ordinal Regression Latent Space 
+    # Confusion Matrix
+    conf_matrix = confusion_matrix(y_all, y_pred_all, labels=[0,1,2,3], normalize='true')
     plt.figure(figsize=(8, 6))
-    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap='Blues')
+    sns.heatmap(conf_matrix, annot=True, cmap='Blues')
     plt.xlabel('Predicted labels')
     plt.ylabel('True labels')
-    plt.title('Confusion Matrix')
+    plt.title('Confusion Matrix Ordinal Regression Latent Space')
 
     plt.figure(figsize=(20, 8))
-
 
     # Scatter plot for true labels
     plt.subplot(1, 2, 1)  # First subplot in a 1x2 grid
@@ -276,5 +312,24 @@ if __name__ == '__main__':
     ax_pred.set_xlabel('t-SNE Dimension 1')
     ax_pred.set_ylabel('t-SNE Dimension 2')
     ax_pred.set_zlabel('t-SNE Dimension 3')
+
+
+    # Unsupervised Clustering Latent Space
+    plt.figure(figsize=(20, 8))
+
+    # Plot for True Labels
+    plt.subplot(1, 2, 1)  # First subplot in a 1x2 grid
+    plt.scatter(X[:, 0], X[:, 1], c=y, cmap='tab10', alpha=0.6)
+    plt.title('True Labels')
+    plt.xlabel('t-SNE Dimension 1')
+    plt.ylabel('t-SNE Dimension 2')
+    #plt.colorbar(label='Ordinal Class')
+
+    # Plot for Predicted Labels
+    plt.subplot(1, 2, 2)  # Second subplot in a 1x2 grid
+    plt.scatter(X[:, 0], X[:, 1], c=predicted_labels_tsne, cmap='tab10', alpha=0.6)
+    plt.title('Predicted Labels by Ordinal Regression t-SNE')
+    plt.xlabel('t-SNE Dimension 1')
+    plt.ylabel('t-SNE Dimension 2')
 
     plt.show()
